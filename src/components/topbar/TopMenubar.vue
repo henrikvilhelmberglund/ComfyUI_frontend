@@ -11,6 +11,7 @@
       class="comfyui-logo ml-2 app-drag h-6"
     />
     <CommandMenubar />
+    <WorkflowDropdownToggleButton />
     <div class="flex-grow min-w-0 app-drag h-full">
       <WorkflowTabs v-if="workflowTabsPosition === 'Topbar'" />
     </div>
@@ -50,6 +51,7 @@ import Actionbar from '@/components/actionbar/ComfyActionbar.vue'
 import BottomPanelToggleButton from '@/components/topbar/BottomPanelToggleButton.vue'
 import CommandMenubar from '@/components/topbar/CommandMenubar.vue'
 import CurrentUserButton from '@/components/topbar/CurrentUserButton.vue'
+import WorkflowDropdownToggleButton from '@/components/topbar/WorkflowDropdownToggleButton.vue'
 import WorkflowTabs from '@/components/topbar/WorkflowTabs.vue'
 import { app } from '@/scripts/app'
 import { useSettingStore } from '@/stores/settingStore'
