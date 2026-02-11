@@ -111,7 +111,7 @@ const { isIdle: isExecutionIdle } = storeToRefs(useExecutionStore())
 const position = computed(() => settingsStore.get('Comfy.UseNewMenu'))
 const visible = computed(() => position.value !== 'Disabled')
 const showClearPendingTasksButton = computed(() =>
-  settingsStore.get('Comfy.Menu.ShowClearPendingTasksButton')
+  settingsStore.get('Comfy.Queue.ShowClearPendingTasksButton')
 )
 const isQueuePanelV2Enabled = computed(() =>
   settingsStore.get('Comfy.Queue.QPOV2')
