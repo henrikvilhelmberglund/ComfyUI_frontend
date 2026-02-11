@@ -77,6 +77,9 @@
       pcOptionCheckbox: {
         root: { class: 'hidden' },
         style: { display: 'none' }
+      },
+      emptyMessage: {
+        class: 'px-3 pb-4 text-sm text-muted-foreground'
       }
     }"
     :aria-label="label || t('g.multiSelectDropdown')"
@@ -160,7 +163,7 @@
         >
           <i
             v-if="slotProps.selected"
-            class="text-bold icon-[lucide--check] text-xs text-white"
+            class="text-bold icon-[lucide--check] text-xs text-base-foreground"
           />
         </div>
         <span>

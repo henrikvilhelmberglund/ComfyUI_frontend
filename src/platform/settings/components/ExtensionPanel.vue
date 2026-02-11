@@ -3,7 +3,9 @@
     <template #header>
       <SearchBox
         v-model="filters['global'].value"
-        :placeholder="$t('g.searchExtensions') + '...'"
+        :placeholder="
+          $t('g.searchPlaceholder', { subject: $t('g.extensions') })
+        "
       />
       <Message
         v-if="hasChanges"
@@ -20,12 +22,9 @@
           </li>
         </ul>
         <div class="flex justify-end">
-          <Button
-            :label="$t('g.reloadToApplyChanges')"
-            outlined
-            severity="danger"
-            @click="applyChanges"
-          />
+          <Button variant="destructive" @click="applyChanges">
+            {{ $t('g.reloadToApplyChanges') }}
+          </Button>
         </div>
       </Message>
     </template>
@@ -65,11 +64,12 @@
       >
         <template #header>
           <Button
-            icon="pi pi-ellipsis-h"
-            text
-            severity="secondary"
+            size="icon"
+            variant="muted-textonly"
             @click="menu?.show($event)"
-          />
+          >
+            <i class="pi pi-ellipsis-h" />
+          </Button>
           <ContextMenu ref="menu" :model="contextMenuItems" />
         </template>
         <template #body="slotProps">
@@ -86,7 +86,6 @@
 
 <script setup lang="ts">
 import { FilterMatchMode } from '@primevue/core/api'
-import Button from 'primevue/button'
 import Column from 'primevue/column'
 import ContextMenu from 'primevue/contextmenu'
 import DataTable from 'primevue/datatable'
@@ -99,6 +98,7 @@ import { useI18n } from 'vue-i18n'
 
 import SearchBox from '@/components/common/SearchBox.vue'
 import PanelTemplate from '@/components/dialog/content/setting/PanelTemplate.vue'
+import Button from '@/components/ui/button/Button.vue'
 import { useSettingStore } from '@/platform/settings/settingStore'
 import { useExtensionStore } from '@/stores/extensionStore'
 import type { ComfyExtension } from '@/types/comfy'

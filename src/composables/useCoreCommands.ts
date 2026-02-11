@@ -8,6 +8,7 @@ import {
   DEFAULT_DARK_COLOR_PALETTE,
   DEFAULT_LIGHT_COLOR_PALETTE
 } from '@/constants/coreColorPalettes'
+
 import { tryToggleWidgetPromotion } from '@/core/graph/subgraph/proxyWidgetUtils'
 import { t } from '@/i18n'
 import {
@@ -17,9 +18,9 @@ import {
   LiteGraph
 } from '@/lib/litegraph/src/litegraph'
 import type { Point } from '@/lib/litegraph/src/litegraph'
+import { useBillingContext } from '@/composables/billing/useBillingContext'
 import { useAssetBrowserDialog } from '@/platform/assets/composables/useAssetBrowserDialog'
 import { createModelNodeFromAsset } from '@/platform/assets/utils/createModelNodeFromAsset'
-import { useSubscription } from '@/platform/cloud/subscription/composables/useSubscription'
 import { useSettingStore } from '@/platform/settings/settingStore'
 import { buildSupportUrl } from '@/platform/support/config'
 import { useTelemetry } from '@/platform/telemetry'
@@ -39,7 +40,11 @@ import { useLitegraphService } from '@/services/litegraphService'
 import type { ComfyCommand } from '@/stores/commandStore'
 import { useExecutionStore } from '@/stores/executionStore'
 import { useHelpCenterStore } from '@/stores/helpCenterStore'
-import { useQueueSettingsStore, useQueueStore } from '@/stores/queueStore'
+import {
+  useQueueSettingsStore,
+  useQueueStore,
+  useQueueUIStore
+} from '@/stores/queueStore'
 import { useSubgraphNavigationStore } from '@/stores/subgraphNavigationStore'
 import { useSubgraphStore } from '@/stores/subgraphStore'
 import { useBottomPanelStore } from '@/stores/workspace/bottomPanelStore'
@@ -60,11 +65,12 @@ import { ManagerTab } from '@/workbench/extensions/manager/types/comfyManagerTyp
 
 import { useWorkflowTemplateSelectorDialog } from './useWorkflowTemplateSelectorDialog'
 
-const { isActiveSubscription, showSubscriptionDialog } = useSubscription()
+import { useMaskEditorStore } from '@/stores/maskEditorStore'
+import { useDialogStore } from '@/stores/dialogStore'
 
 const moveSelectedNodesVersionAdded = '1.22.2'
-
 export function useCoreCommands(): ComfyCommand[] {
+  const { isActiveSubscription, showSubscriptionDialog } = useBillingContext()
   const workflowService = useWorkflowService()
   const workflowStore = useWorkflowStore()
   const dialogService = useDialogService()
@@ -75,12 +81,24 @@ export function useCoreCommands(): ComfyCommand[] {
   const executionStore = useExecutionStore()
   const telemetry = useTelemetry()
   const { staticUrls, buildDocsUrl } = useExternalLink()
+  const settingStore = useSettingStore()
 
   const bottomPanelStore = useBottomPanelStore()
+
+  const dialogStore = useDialogStore()
+  const maskEditorStore = useMaskEditorStore()
 
   const { getSelectedNodes, toggleSelectedNodesMode } =
     useSelectedLiteGraphItems()
   const getTracker = () => workflowStore.activeWorkflow?.changeTracker
+
+  function isQueuePanelV2Enabled() {
+    return settingStore.get('Comfy.Queue.QPOV2')
+  }
+
+  async function toggleQueuePanelV2() {
+    await settingStore.set('Comfy.Queue.QPOV2', !isQueuePanelV2Enabled())
+  }
 
   const moveSelectedNodes = (
     positionUpdater: (pos: Point, gridSize: number) => Point
@@ -153,8 +171,9 @@ export function useCoreCommands(): ComfyCommand[] {
       icon: 'pi pi-save',
       label: 'Publish Subgraph',
       menubarLabel: 'Publish',
-      function: async () => {
-        await useSubgraphStore().publishSubgraph()
+      function: async (metadata?: Record<string, unknown>) => {
+        const name = metadata?.name as string | undefined
+        await useSubgraphStore().publishSubgraph(name)
       }
     },
     {
@@ -168,6 +187,26 @@ export function useCoreCommands(): ComfyCommand[] {
         if (!workflow) return
 
         await workflowService.saveWorkflowAs(workflow)
+      }
+    },
+    {
+      id: 'Comfy.RenameWorkflow',
+      icon: 'pi pi-pencil',
+      label: 'Rename Workflow',
+      menubarLabel: 'Rename',
+      function: async () => {
+        const workflow = workflowStore.activeWorkflow
+        if (!workflow || !workflow.isPersisted) return
+
+        const newName = await dialogService.prompt({
+          title: t('g.rename'),
+          message: t('workflowService.enterFilenamePrompt'),
+          defaultValue: workflow.filename
+        })
+        if (!newName || newName === workflow.filename) return
+
+        const newPath = workflow.directory + '/' + newName + '.json'
+        await workflowService.renameWorkflow(workflow, newPath)
       }
     },
     {
@@ -195,7 +234,12 @@ export function useCoreCommands(): ComfyCommand[] {
       label: 'Undo',
       category: 'essentials' as const,
       function: async () => {
-        await getTracker()?.undo?.()
+        // If Mask Editor is open, use its history instead of the graph
+        if (dialogStore.isDialogOpen('global-mask-editor')) {
+          maskEditorStore.canvasHistory.undo()
+        } else {
+          await getTracker()?.undo?.()
+        }
       }
     },
     {
@@ -204,7 +248,11 @@ export function useCoreCommands(): ComfyCommand[] {
       label: 'Redo',
       category: 'essentials' as const,
       function: async () => {
-        await getTracker()?.redo?.()
+        if (dialogStore.isDialogOpen('global-mask-editor')) {
+          maskEditorStore.canvasHistory.redo()
+        } else {
+          await getTracker()?.redo?.()
+        }
       }
     },
     {
@@ -424,6 +472,18 @@ export function useCoreCommands(): ComfyCommand[] {
       active: () => useSettingStore().get('Comfy.Minimap.Visible')
     },
     {
+      id: 'Comfy.Queue.ToggleOverlay',
+      icon: 'pi pi-history',
+      label: () => t('queue.toggleJobHistory'),
+      menubarLabel: () => t('queue.jobHistory'),
+      versionAdded: '1.37.0',
+      category: 'view-controls' as const,
+      function: () => {
+        useQueueUIStore().toggleOverlay()
+      },
+      active: () => useQueueUIStore().isOverlayExpanded
+    },
+    {
       id: 'Comfy.QueuePrompt',
       icon: 'pi pi-play',
       label: 'Queue Prompt',
@@ -522,7 +582,7 @@ export function useCoreCommands(): ComfyCommand[] {
       versionAdded: '1.3.7',
       category: 'view-controls' as const,
       function: () => {
-        dialogService.showSettingsDialog()
+        void dialogService.showSettingsDialog()
       }
     },
     {
@@ -771,7 +831,7 @@ export function useCoreCommands(): ComfyCommand[] {
       menubarLabel: 'About ComfyUI',
       versionAdded: '1.6.4',
       function: () => {
-        dialogService.showSettingsDialog('about')
+        void dialogService.showSettingsDialog('about')
       }
     },
     {
@@ -804,7 +864,7 @@ export function useCoreCommands(): ComfyCommand[] {
           userEmail: userEmail.value,
           userId: resolvedUserInfo.value?.id
         })
-        window.open(supportUrl, '_blank')
+        window.open(supportUrl, '_blank', 'noopener,noreferrer')
       }
     },
     {
@@ -879,15 +939,6 @@ export function useCoreCommands(): ComfyCommand[] {
           initialTab: ManagerTab.Missing,
           showToastOnLegacyError: false
         })
-      }
-    },
-    {
-      id: 'Comfy.Manager.ToggleManagerProgressDialog',
-      icon: 'pi pi-spinner',
-      label: 'Toggle the Custom Nodes Manager Progress Bar',
-      versionAdded: '1.13.9',
-      function: () => {
-        dialogService.toggleManagerProgressDialog()
       }
     },
     {
@@ -1046,6 +1097,75 @@ export function useCoreCommands(): ComfyCommand[] {
       }
     },
     {
+      id: 'Comfy.Subgraph.SetDescription',
+      icon: 'pi pi-pencil',
+      label: 'Set Subgraph Description',
+      versionAdded: '1.39.7',
+      function: async (metadata?: Record<string, unknown>) => {
+        const canvas = canvasStore.getCanvas()
+        const subgraph = canvas.subgraph
+        if (!subgraph) return
+
+        const extra = (subgraph.extra ??= {}) as Record<string, unknown>
+        const currentDescription = (extra.BlueprintDescription as string) ?? ''
+
+        let description: string | null | undefined
+        const rawDescription = metadata?.description
+        if (rawDescription != null) {
+          description =
+            typeof rawDescription === 'string'
+              ? rawDescription
+              : String(rawDescription)
+        }
+        description ??= await dialogService.prompt({
+          title: t('g.description'),
+          message: t('subgraphStore.enterDescription'),
+          defaultValue: currentDescription
+        })
+        if (description === null) return
+
+        extra.BlueprintDescription = description.trim() || undefined
+        workflowStore.activeWorkflow?.changeTracker?.checkState()
+      }
+    },
+    {
+      id: 'Comfy.Subgraph.SetSearchAliases',
+      icon: 'pi pi-search',
+      label: 'Set Subgraph Search Aliases',
+      versionAdded: '1.39.7',
+      function: async (metadata?: Record<string, unknown>) => {
+        const canvas = canvasStore.getCanvas()
+        const subgraph = canvas.subgraph
+        if (!subgraph) return
+
+        const parseAliases = (value: unknown): string[] =>
+          (Array.isArray(value) ? value.map(String) : String(value).split(','))
+            .map((s) => s.trim())
+            .filter(Boolean)
+
+        const extra = (subgraph.extra ??= {}) as Record<string, unknown>
+
+        let aliases: string[]
+        const rawAliases = metadata?.aliases
+        if (rawAliases == null) {
+          const input = await dialogService.prompt({
+            title: t('subgraphStore.searchAliases'),
+            message: t('subgraphStore.enterSearchAliases'),
+            defaultValue: parseAliases(extra.BlueprintSearchAliases ?? '').join(
+              ', '
+            )
+          })
+          if (input === null) return
+          aliases = parseAliases(input)
+        } else {
+          aliases = parseAliases(rawAliases)
+        }
+
+        extra.BlueprintSearchAliases = aliases.length > 0 ? aliases : undefined
+        workflowStore.activeWorkflow?.changeTracker?.checkState()
+      }
+    },
+    {
       id: 'Comfy.Dev.ShowModelSelector',
       icon: 'pi pi-box',
       label: 'Show Model Selector (Dev)',
@@ -1176,10 +1296,24 @@ export function useCoreCommands(): ComfyCommand[] {
       }
     },
     {
+      id: 'Comfy.ToggleQPOV2',
+      icon: 'pi pi-list',
+      label: 'Toggle Queue Panel V2',
+      function: toggleQueuePanelV2
+    },
+    {
       id: 'Comfy.ToggleLinear',
       icon: 'pi pi-database',
-      label: 'toggle linear mode',
-      function: () => (canvasStore.linearMode = !canvasStore.linearMode)
+      label: 'Toggle App Mode',
+      function: (metadata?: Record<string, unknown>) => {
+        const source =
+          typeof metadata?.source === 'string' ? metadata.source : 'keybind'
+        const newMode = !canvasStore.linearMode
+        if (newMode) useTelemetry()?.trackEnterLinear({ source })
+        app.rootGraph.extra.linearMode = newMode
+        workflowStore.activeWorkflow?.changeTracker?.checkState()
+        canvasStore.linearMode = newMode
+      }
     }
   ]
 

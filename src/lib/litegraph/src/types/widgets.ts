@@ -1,8 +1,19 @@
+import type { Bounds } from '@/renderer/core/layout/types'
+
 import type { CanvasColour, Point, RequiredProps, Size } from '../interfaces'
-import type { CanvasPointer, LGraphCanvas, LGraphNode } from '../litegraph'
+import type {
+  CanvasPointer,
+  LGraphCanvas,
+  LGraphNode,
+  NodeId
+} from '../litegraph'
 import type { CanvasPointerEvent } from './events'
 
-export interface IWidgetOptions<TValues = unknown[]> {
+export interface NodeBindable {
+  setNodeId(nodeId: NodeId): void
+}
+
+export interface IWidgetOptions<TValues = unknown> {
   on?: string
   off?: string
   max?: number
@@ -27,12 +38,22 @@ export interface IWidgetOptions<TValues = unknown[]> {
   socketless?: boolean
   /** If `true`, the widget will not be rendered by the Vue renderer. */
   canvasOnly?: boolean
+  /** Used as a temporary override for determining the asset type in vue mode*/
+  nodeType?: string
 
   values?: TValues
   /** Optional function to format values for display (e.g., hash → human-readable name) */
   getOptionLabel?: (value?: string | null) => string
   callback?: IWidget['callback']
   iconClass?: string
+
+  // Vue widget options
+  disabled?: boolean
+  useGrouping?: boolean
+  placeholder?: string
+  showThumbnails?: boolean
+  showItemNavigators?: boolean
+  hidden?: boolean
 }
 
 interface IWidgetSliderOptions extends IWidgetOptions<number[]> {
@@ -50,6 +71,10 @@ interface IWidgetKnobOptions extends IWidgetOptions<number[]> {
   slider_color?: CanvasColour // TODO: Replace with knob color
   marker_color?: CanvasColour
   gradient_stops?: string
+}
+
+export interface IWidgetAssetOptions extends IWidgetOptions {
+  openModal: (widget: IBaseWidget) => void
 }
 
 /**
@@ -82,6 +107,8 @@ export type IWidget =
   | ISelectButtonWidget
   | ITextareaWidget
   | IAssetWidget
+  | IImageCropWidget
+  | IBoundingBoxWidget
 
 export interface IBooleanWidget extends IBaseWidget<boolean, 'toggle'> {
   type: 'toggle'
@@ -247,10 +274,22 @@ export interface ITextareaWidget extends IBaseWidget<string, 'textarea'> {
 export interface IAssetWidget extends IBaseWidget<
   string,
   'asset',
-  IWidgetOptions<string[]>
+  IWidgetAssetOptions
 > {
   type: 'asset'
   value: string
+}
+
+/** Image crop widget for cropping image */
+export interface IImageCropWidget extends IBaseWidget<Bounds, 'imagecrop'> {
+  type: 'imagecrop'
+  value: Bounds
+}
+
+/** Bounding box widget for defining regions with numeric inputs */
+export interface IBoundingBoxWidget extends IBaseWidget<Bounds, 'boundingbox'> {
+  type: 'boundingbox'
+  value: Bounds
 }
 
 /**
@@ -271,7 +310,7 @@ export type TWidgetValue = IWidget['value']
 export interface IBaseWidget<
   TValue = boolean | number | string | object | undefined,
   TType extends string = string,
-  TOptions extends IWidgetOptions<unknown> = IWidgetOptions<unknown>
+  TOptions extends IWidgetOptions = IWidgetOptions
 > {
   [symbol: symbol]: boolean
 
@@ -284,6 +323,7 @@ export interface IBaseWidget<
   /** Widget type (see {@link TWidgetType}) */
   type: TType
   value?: TValue
+  vueTrack?: () => void
 
   /**
    * Whether the widget value should be serialized on node serialization.
@@ -340,7 +380,7 @@ export interface IBaseWidget<
 
   // TODO: Confirm this format
   callback?(
-    value: any,
+    value: unknown,
     canvas?: LGraphCanvas,
     node?: LGraphNode,
     pos?: Point,

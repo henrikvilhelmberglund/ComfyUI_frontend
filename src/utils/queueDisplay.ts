@@ -3,8 +3,8 @@ import type { JobState } from '@/types/queue'
 import { formatDuration } from '@/utils/formatUtil'
 import { clampPercentInt, formatPercent0 } from '@/utils/numberUtil'
 
-type BuildJobDisplayCtx = {
-  t: (k: string, v?: Record<string, any>) => string
+export type BuildJobDisplayCtx = {
+  t: (k: string, v?: Record<string, unknown>) => string
   locale: string
   formatClockTimeFn: (ts: number, locale: string) => string
   isActive: boolean

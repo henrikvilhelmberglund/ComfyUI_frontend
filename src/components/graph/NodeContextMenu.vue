@@ -220,6 +220,12 @@ function show(event: MouseEvent) {
     y: screenY / scale - offset[1]
   }
 
+  // Initialize last* values to current transform to prevent updateMenuPosition
+  // from overwriting PrimeVue's flip-adjusted position on the first RAF tick
+  lastScale = scale
+  lastOffsetX = offset[0]
+  lastOffsetY = offset[1]
+
   isOpen.value = true
   contextMenu.value?.show(event)
 }
@@ -263,7 +269,7 @@ function onMenuHide() {
 }
 
 onMounted(() => {
-  registerNodeOptionsInstance({ toggle, hide, isOpen })
+  registerNodeOptionsInstance({ toggle, show, hide, isOpen })
 })
 
 onUnmounted(() => {

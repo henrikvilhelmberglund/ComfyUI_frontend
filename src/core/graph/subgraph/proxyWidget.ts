@@ -115,9 +115,11 @@ const onConfigure = function (
         if (isActiveGraph && w instanceof DOMWidgetImpl) setWidget(w)
         return [w]
       })
-      this.widgets = this.widgets.filter(
-        (w) => !isProxyWidget(w) && !parsed.some(([, name]) => w.name === name)
-      )
+      this.widgets = this.widgets.filter((w) => {
+        if (isProxyWidget(w)) return false
+        const widgetName = w.name
+        return !parsed.some(([, name]) => widgetName === name)
+      })
       this.widgets.push(...newWidgets)
 
       canvasStore.canvas?.setDirty(true, true)
@@ -152,6 +154,7 @@ function newProxyWidget(
     computedHeight: undefined,
     isProxyWidget: true,
     last_y: undefined,
+    label: name,
     name,
     node: subgraphNode,
     onRemove: undefined,
@@ -211,11 +214,9 @@ function newProxyFromOverlay(subgraphNode: SubgraphNode, overlay: Overlay) {
       }
       return Reflect.get(redirectedTarget, property, redirectedReceiver)
     },
-    set(_t: IBaseWidget, property: string, value: unknown, receiver: object) {
+    set(_t: IBaseWidget, property: string, value: unknown) {
       let redirectedTarget: object = backingWidget
-      let redirectedReceiver = receiver
-      if (property == 'value') redirectedReceiver = backingWidget
-      else if (property == 'computedHeight') {
+      if (property == 'computedHeight') {
         if (overlay.widgetName.startsWith('$$') && linkedNode) {
           updatePreviews(linkedNode)
         }
@@ -228,9 +229,8 @@ function newProxyFromOverlay(subgraphNode: SubgraphNode, overlay: Overlay) {
       }
       if (Object.prototype.hasOwnProperty.call(overlay, property)) {
         redirectedTarget = overlay
-        redirectedReceiver = overlay
       }
-      return Reflect.set(redirectedTarget, property, value, redirectedReceiver)
+      return Reflect.set(redirectedTarget, property, value, redirectedTarget)
     },
     getPrototypeOf() {
       return Reflect.getPrototypeOf(backingWidget)

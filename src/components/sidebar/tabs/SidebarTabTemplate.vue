@@ -1,7 +1,11 @@
 <template>
   <div
-    class="comfy-vue-side-bar-container group/sidebar-tab flex h-full flex-col"
-    :class="props.class"
+    :class="
+      cn(
+        'comfy-vue-side-bar-container group/sidebar-tab flex h-full flex-col',
+        props.class
+      )
+    "
   >
     <div class="comfy-vue-side-bar-header flex flex-col gap-2">
       <Toolbar
@@ -15,7 +19,7 @@
         </template>
         <template #end>
           <div
-            class="touch:w-auto touch:opacity-100 flex flex-row transition-all duration-200 motion-safe:w-0 motion-safe:opacity-0 motion-safe:group-focus-within/sidebar-tab:w-auto motion-safe:group-focus-within/sidebar-tab:opacity-100 motion-safe:group-hover/sidebar-tab:w-auto motion-safe:group-hover/sidebar-tab:opacity-100"
+            class="touch:w-auto touch:opacity-100 flex flex-row overflow-hidden transition-all duration-200 motion-safe:w-0 motion-safe:opacity-0 motion-safe:group-focus-within/sidebar-tab:w-auto motion-safe:group-focus-within/sidebar-tab:opacity-100 motion-safe:group-hover/sidebar-tab:w-auto motion-safe:group-hover/sidebar-tab:opacity-100"
           >
             <slot name="tool-buttons" />
           </div>
@@ -34,6 +38,8 @@
 <script setup lang="ts">
 import ScrollPanel from 'primevue/scrollpanel'
 import Toolbar from 'primevue/toolbar'
+
+import { cn } from '@/utils/tailwindUtil'
 
 const props = defineProps<{
   title: string

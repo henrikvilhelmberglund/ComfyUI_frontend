@@ -197,7 +197,22 @@ const displayedJobGroups = computed(() => groupedJobItems.value)
 const onCancelItem = wrapWithErrorHandlingAsync(async (item: JobListItem) => {
   const promptId = item.taskRef?.promptId
   if (!promptId) return
-  await api.interrupt(promptId)
+
+  if (item.state === 'running' || item.state === 'initialization') {
+    // Running/initializing jobs: interrupt execution
+    // Cloud backend uses deleteItem, local uses interrupt
+    if (isCloud) {
+      await api.deleteItem('queue', promptId)
+    } else {
+      await api.interrupt(promptId)
+    }
+    executionStore.clearInitializationByPromptId(promptId)
+    await queueStore.update()
+  } else if (item.state === 'pending') {
+    // Pending jobs: remove from queue
+    await api.deleteItem('queue', promptId)
+    await queueStore.update()
+  }
 })
 
 const onDeleteItem = wrapWithErrorHandlingAsync(async (item: JobListItem) => {
@@ -249,17 +264,26 @@ const focusAssetInSidebar = async (item: JobListItem) => {
     throw new Error('Asset not found in media assets panel')
   }
   assetSelectionStore.setSelection([assetId])
+  assetSelectionStore.setLastSelectedAssetId(assetId)
 }
 
 const inspectJobAsset = wrapWithErrorHandlingAsync(
   async (item: JobListItem) => {
-    openResultGallery(item)
+    await openResultGallery(item)
     await focusAssetInSidebar(item)
   }
 )
 
 const cancelQueuedWorkflows = wrapWithErrorHandlingAsync(async () => {
+  // Capture pending promptIds before clearing
+  const pendingPromptIds = queueStore.pendingTasks
+    .map((task) => task.promptId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+
   await commandStore.execute('Comfy.ClearPendingTasks')
+
+  // Clear initialization state for removed prompts
+  executionStore.clearInitializationByPromptIds(pendingPromptIds)
 })
 
 const interruptAll = wrapWithErrorHandlingAsync(async () => {
@@ -275,10 +299,14 @@ const interruptAll = wrapWithErrorHandlingAsync(async () => {
   // on cloud to ensure we cancel the workflow the user clicked.
   if (isCloud) {
     await Promise.all(promptIds.map((id) => api.deleteItem('queue', id)))
+    executionStore.clearInitializationByPromptIds(promptIds)
+    await queueStore.update()
     return
   }
 
   await Promise.all(promptIds.map((id) => api.interrupt(id)))
+  executionStore.clearInitializationByPromptIds(promptIds)
+  await queueStore.update()
 })
 
 const showClearHistoryDialog = () => {

@@ -3,31 +3,39 @@
     <template #tool-buttons>
       <Button
         v-tooltip.bottom="$t('g.refresh')"
-        icon="pi pi-refresh"
-        severity="secondary"
-        text
+        variant="muted-textonly"
+        size="icon"
+        :aria-label="$t('g.refresh')"
         @click="modelStore.loadModelFolders"
-      />
+      >
+        <i class="icon-[lucide--refresh-cw] size-4" />
+      </Button>
       <Button
         v-tooltip.bottom="$t('g.loadAllFolders')"
-        icon="pi pi-cloud-download"
-        severity="secondary"
-        text
+        variant="muted-textonly"
+        size="icon"
+        :aria-label="$t('g.loadAllFolders')"
         @click="modelStore.loadModels"
-      />
+      >
+        <i class="icon-[lucide--cloud-download] size-4" />
+      </Button>
     </template>
     <template #header>
       <div class="px-2 2xl:px-4">
         <SearchBox
           ref="searchBoxRef"
           v-model:model-value="searchQuery"
-          :placeholder="$t('g.searchModels') + '...'"
+          :placeholder="
+            $t('g.searchPlaceholder', {
+              subject: $t('sideToolbar.labels.models')
+            })
+          "
           @search="handleSearch"
         />
       </div>
     </template>
     <template #body>
-      <ElectronDownloadItems v-if="isElectron()" />
+      <ElectronDownloadItems v-if="isDesktop" />
 
       <Divider type="dashed" class="m-2" />
       <TreeExplorer
@@ -46,7 +54,6 @@
 
 <script setup lang="ts">
 import { Divider } from 'primevue'
-import Button from 'primevue/button'
 import { computed, nextTick, onMounted, ref, toRef, watch } from 'vue'
 
 import SearchBox from '@/components/common/SearchBox.vue'
@@ -54,6 +61,7 @@ import TreeExplorer from '@/components/common/TreeExplorer.vue'
 import SidebarTabTemplate from '@/components/sidebar/tabs/SidebarTabTemplate.vue'
 import ElectronDownloadItems from '@/components/sidebar/tabs/modelLibrary/ElectronDownloadItems.vue'
 import ModelTreeLeaf from '@/components/sidebar/tabs/modelLibrary/ModelTreeLeaf.vue'
+import Button from '@/components/ui/button/Button.vue'
 import { useTreeExpansion } from '@/composables/useTreeExpansion'
 import { useSettingStore } from '@/platform/settings/settingStore'
 import { useLitegraphService } from '@/services/litegraphService'
@@ -61,7 +69,7 @@ import type { ComfyModelDef, ModelFolder } from '@/stores/modelStore'
 import { ResourceState, useModelStore } from '@/stores/modelStore'
 import { useModelToNodeStore } from '@/stores/modelToNodeStore'
 import type { TreeExplorerNode, TreeNode } from '@/types/treeExplorerTypes'
-import { isElectron } from '@/utils/envUtil'
+import { isDesktop } from '@/platform/distribution/types'
 import { buildTree } from '@/utils/treeUtil'
 
 const modelStore = useModelStore()

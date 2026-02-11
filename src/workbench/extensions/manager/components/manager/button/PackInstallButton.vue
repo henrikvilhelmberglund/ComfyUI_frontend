@@ -1,19 +1,20 @@
 <template>
   <Button
-    variant="secondary"
+    variant="primary"
     :size
     :disabled="isLoading || isInstalling"
     @click="installAllPacks"
   >
     <i
       v-if="hasConflict && !isInstalling && !isLoading"
-      class="pi pi-exclamation-triangle text-yellow-500"
+      class="icon-[lucide--triangle-alert] text-warning-background"
     />
     <DotSpinner
       v-else-if="isLoading || isInstalling"
       duration="1s"
       :size="size === 'sm' ? 12 : 16"
     />
+    <i v-else class="icon-[lucide--download]" />
     <span>{{ computedLabel }}</span>
   </Button>
 </template>

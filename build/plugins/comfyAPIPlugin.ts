@@ -11,8 +11,8 @@ const SKIP_WARNING_FILES = new Set(['scripts/app', 'scripts/api'])
 /** Files that will be removed in v1.34 */
 const DEPRECATED_FILES = [
   'scripts/ui',
-  'extensions/core/maskEditorOld',
-  'extensions/core/groupNode'
+  'extensions/core/groupNode',
+  'extensions/core/nodeTemplates'
 ] as const
 
 function getWarningMessage(
@@ -80,6 +80,7 @@ function getModuleName(id: string): string {
 export function comfyAPIPlugin(isDev: boolean): Plugin {
   return {
     name: 'comfy-api-plugin',
+    apply: 'build',
     transform(code: string, id: string) {
       if (isDev) return null
 

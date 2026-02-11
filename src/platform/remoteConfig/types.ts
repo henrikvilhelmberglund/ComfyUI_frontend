@@ -26,6 +26,7 @@ type FirebaseRuntimeConfig = {
  * Configuration fetched from the server at runtime
  */
 export type RemoteConfig = {
+  gtm_container_id?: string
   mixpanel_token?: string
   subscription_required?: boolean
   server_health_alert?: ServerHealthAlert
@@ -35,8 +36,10 @@ export type RemoteConfig = {
   firebase_config?: FirebaseRuntimeConfig
   telemetry_disabled_events?: TelemetryEventName[]
   model_upload_button_enabled?: boolean
-  asset_update_options_enabled?: boolean
+  asset_rename_enabled?: boolean
   private_models_enabled?: boolean
-  subscription_tiers_enabled?: boolean
   onboarding_survey_enabled?: boolean
+  linear_toggle_enabled?: boolean
+  team_workspaces_enabled?: boolean
+  user_secrets_enabled?: boolean
 }

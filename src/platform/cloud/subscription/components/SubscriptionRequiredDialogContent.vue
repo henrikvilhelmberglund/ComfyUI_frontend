@@ -4,16 +4,14 @@
     class="relative flex flex-col p-4 pt-8 md:p-16 !overflow-y-auto h-full gap-8"
   >
     <Button
-      :pt="{
-        icon: { class: 'text-xl' }
-      }"
-      icon="pi pi-times"
-      text
-      rounded
-      class="shrink-0 text-text-secondary hover:bg-white/10 absolute right-2.5 top-2.5"
+      size="icon"
+      variant="muted-textonly"
+      class="rounded-full shrink-0 text-text-secondary hover:bg-white/10 absolute right-2.5 top-2.5"
       :aria-label="$t('g.close')"
       @click="handleClose"
-    />
+    >
+      <i class="pi pi-times text-xl" />
+    </Button>
     <div class="text-center">
       <h2 class="text-xl lg:text-2xl text-muted-foreground m-0">
         {{ $t('subscription.description') }}
@@ -29,37 +27,36 @@
       </p>
       <div class="flex items-center gap-1.5">
         <Button
-          :label="$t('subscription.contactUs')"
-          text
-          severity="secondary"
-          icon="pi pi-comments"
-          icon-pos="right"
+          variant="muted-textonly"
           class="h-6 p-1 text-sm text-text-secondary hover:text-base-foreground"
           @click="handleContactUs"
-        />
+        >
+          {{ $t('subscription.contactUs') }}
+          <i class="pi pi-comments" />
+        </Button>
         <span class="text-sm text-text-secondary">{{ $t('g.or') }}</span>
         <Button
-          :label="$t('subscription.viewEnterprise')"
-          text
-          severity="secondary"
-          icon="pi pi-external-link"
-          icon-pos="right"
+          variant="muted-textonly"
           class="h-6 p-1 text-sm text-text-secondary hover:text-base-foreground"
           @click="handleViewEnterprise"
-        />
+        >
+          {{ $t('subscription.viewEnterprise') }}
+          <i class="pi pi-external-link" />
+        </Button>
       </div>
     </div>
   </div>
   <div v-else class="legacy-dialog relative grid h-full grid-cols-5">
     <!-- Custom close button -->
     <Button
-      icon="pi pi-times"
-      text
-      rounded
-      class="absolute top-2.5 right-2.5 z-10 h-8 w-8 p-0 text-white hover:bg-white/20"
+      size="icon"
+      variant="muted-textonly"
+      class="rounded-full absolute top-2.5 right-2.5 z-10 h-8 w-8 p-0 text-white hover:bg-white/20"
       :aria-label="$t('g.close')"
       @click="handleClose"
-    />
+    >
+      <i class="pi pi-times" />
+    </Button>
 
     <div
       class="relative col-span-2 flex items-center justify-center overflow-hidden rounded-sm"
@@ -122,15 +119,15 @@
 </template>
 
 <script setup lang="ts">
-import Button from 'primevue/button'
 import { computed, onBeforeUnmount, watch } from 'vue'
 
 import CloudBadge from '@/components/topbar/CloudBadge.vue'
+import Button from '@/components/ui/button/Button.vue'
 import { MONTHLY_SUBSCRIPTION_PRICE } from '@/config/subscriptionPricesConfig'
 import PricingTable from '@/platform/cloud/subscription/components/PricingTable.vue'
 import SubscribeButton from '@/platform/cloud/subscription/components/SubscribeButton.vue'
 import SubscriptionBenefits from '@/platform/cloud/subscription/components/SubscriptionBenefits.vue'
-import { useSubscription } from '@/platform/cloud/subscription/composables/useSubscription'
+import { useBillingContext } from '@/composables/billing/useBillingContext'
 import { isCloud } from '@/platform/distribution/types'
 import { useTelemetry } from '@/platform/telemetry'
 import { useCommandStore } from '@/stores/commandStore'
@@ -143,7 +140,10 @@ const emit = defineEmits<{
   close: [subscribed: boolean]
 }>()
 
-const { fetchStatus, isActiveSubscription } = useSubscription()
+const { fetchStatus, isActiveSubscription } = useBillingContext()
+
+const isSubscriptionEnabled = (): boolean =>
+  Boolean(isCloud && window.__CONFIG__?.subscription_required)
 
 // Legacy price for non-tier flow with locale-aware formatting
 const formattedMonthlyPrice = new Intl.NumberFormat(
@@ -159,9 +159,7 @@ const commandStore = useCommandStore()
 const telemetry = useTelemetry()
 
 // Always show custom pricing table for cloud subscriptions
-const showCustomPricingTable = computed(
-  () => isCloud && window.__CONFIG__?.subscription_required
-)
+const showCustomPricingTable = computed(() => isSubscriptionEnabled())
 
 const POLL_INTERVAL_MS = 3000
 const MAX_POLL_ATTEMPTS = 3

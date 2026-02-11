@@ -16,41 +16,43 @@
     />
 
     <div
+      ref="containerRef"
       class="litegraph-minimap relative border border-interface-stroke bg-comfy-menu-bg shadow-interface"
       :style="containerStyles"
     >
       <Button
-        class="absolute top-1 left-1 z-10 hover:bg-interface-button-hover-surface!"
-        size="small"
-        text
-        severity="secondary"
+        class="absolute top-0 left-0 z-10"
+        size="icon"
+        variant="muted-textonly"
+        :aria-label="$t('g.settings')"
         @click.stop="toggleOptionsPanel"
       >
-        <template #icon>
-          <i class="icon-[lucide--settings-2]" />
-        </template>
+        <i class="icon-[lucide--settings-2]" />
       </Button>
       <Button
-        class="absolute top-1 right-1 z-10 hover:bg-interface-button-hover-surface!"
-        size="small"
-        text
-        severity="secondary"
+        class="absolute top-0 right-0 z-10"
+        size="icon"
+        variant="muted-textonly"
+        :aria-label="$t('g.close')"
         data-testid="close-minmap-button"
         @click.stop="() => commandStore.execute('Comfy.Canvas.ToggleMinimap')"
       >
-        <template #icon>
-          <i class="icon-[lucide--x]" />
-        </template>
+        <i class="icon-[lucide--x]" />
       </Button>
 
       <hr
-        class="absolute top-7 h-px border-0 bg-node-component-border"
+        class="absolute top-6 h-px border-0 bg-node-component-border"
         :style="{
           width: containerStyles.width
         }"
       />
 
-      <canvas :width="width" :height="height" class="minimap-canvas" />
+      <canvas
+        ref="canvasRef"
+        :width="width"
+        :height="height"
+        class="minimap-canvas"
+      />
 
       <div class="minimap-viewport" :style="viewportStyles" />
 
@@ -68,17 +70,18 @@
 </template>
 
 <script setup lang="ts">
-import Button from 'primevue/button'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, useTemplateRef } from 'vue'
 
+import Button from '@/components/ui/button/Button.vue'
 import { useMinimap } from '@/renderer/extensions/minimap/composables/useMinimap'
 import { useCommandStore } from '@/stores/commandStore'
 
 import MiniMapPanel from './MiniMapPanel.vue'
 
 const commandStore = useCommandStore()
-
 const minimapRef = ref<HTMLDivElement>()
+const containerRef = useTemplateRef<HTMLDivElement>('containerRef')
+const canvasRef = useTemplateRef<HTMLCanvasElement>('canvasRef')
 
 const {
   initialized,
@@ -101,7 +104,10 @@ const {
   handlePointerCancel,
   handleWheel,
   setMinimapRef
-} = useMinimap()
+} = useMinimap({
+  containerRefMaybe: containerRef,
+  canvasRefMaybe: canvasRef
+})
 
 const showOptionsPanel = ref(false)
 

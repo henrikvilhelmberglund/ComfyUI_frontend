@@ -157,7 +157,9 @@
             <div class="flex flex-col gap-2">
               <div class="flex flex-row items-start justify-between">
                 <div class="flex flex-col gap-2">
-                  <span class="text-sm font-normal text-foreground">
+                  <span
+                    class="text-sm font-normal text-foreground leading-relaxed"
+                  >
                     {{ t('subscription.videoEstimateLabel') }}
                   </span>
                   <div class="flex flex-row items-center gap-2 group pt-2">
@@ -183,25 +185,22 @@
         </div>
         <div class="flex flex-col p-8">
           <Button
-            :label="getButtonLabel(tier)"
-            :severity="getButtonSeverity(tier)"
+            :variant="getButtonSeverity(tier)"
             :disabled="isLoading || isCurrentPlan(tier.key)"
             :loading="loadingTier === tier.key"
             :class="
               cn(
                 'h-10 w-full',
+                getButtonTextClass(tier),
                 tier.key === 'creator'
                   ? 'bg-base-foreground border-transparent hover:bg-inverted-background-hover'
                   : 'bg-secondary-background border-transparent hover:bg-secondary-background-hover focus:bg-secondary-background-selected'
               )
             "
-            :pt="{
-              label: {
-                class: getButtonTextClass(tier)
-              }
-            }"
             @click="() => handleSubscribe(tier.key)"
-          />
+          >
+            {{ getButtonLabel(tier) }}
+          </Button>
         </div>
       </div>
     </div>
@@ -223,16 +222,19 @@
       }"
     >
       <div class="flex flex-col gap-2">
-        <p class="text-sm text-base-foreground">
+        <p class="text-sm text-base-foreground leading-normal">
           {{ t('subscription.videoEstimateExplanation') }}
         </p>
         <a
           href="https://cloud.comfy.org/?template=video_wan2_2_14B_fun_camera"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-sm text-azure-600 hover:text-azure-400 underline"
+          class="text-sm text-azure-600 hover:text-azure-400 no-underline flex gap-1"
         >
-          {{ t('subscription.videoEstimateTryTemplate') }}
+          <span class="underline">
+            {{ t('subscription.videoEstimateTryTemplate') }}
+          </span>
+          <span class="no-underline" v-html="'&rarr;'"></span>
         </a>
       </div>
     </Popover>
@@ -241,17 +243,16 @@
 
 <script setup lang="ts">
 import { cn } from '@comfyorg/tailwind-utils'
-import Button from 'primevue/button'
+import { storeToRefs } from 'pinia'
 import Popover from 'primevue/popover'
 import SelectButton from 'primevue/selectbutton'
 import type { ToggleButtonPassThroughMethodOptions } from 'primevue/togglebutton'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import Button from '@/components/ui/button/Button.vue'
 import { useFirebaseAuthActions } from '@/composables/auth/useFirebaseAuthActions'
 import { useErrorHandling } from '@/composables/useErrorHandling'
-import { getComfyApiBaseUrl } from '@/config/comfyApi'
-import { t } from '@/i18n'
 import { useSubscription } from '@/platform/cloud/subscription/composables/useSubscription'
 import {
   TIER_PRICING,
@@ -261,23 +262,36 @@ import type {
   TierKey,
   TierPricing
 } from '@/platform/cloud/subscription/constants/tierPricing'
+import { performSubscriptionCheckout } from '@/platform/cloud/subscription/utils/subscriptionCheckoutUtil'
+import { isPlanDowngrade } from '@/platform/cloud/subscription/utils/subscriptionTierRank'
+import type { BillingCycle } from '@/platform/cloud/subscription/utils/subscriptionTierRank'
 import { isCloud } from '@/platform/distribution/types'
-import {
-  FirebaseAuthStoreError,
-  useFirebaseAuthStore
-} from '@/stores/firebaseAuthStore'
+import { useTelemetry } from '@/platform/telemetry'
+import type { CheckoutAttributionMetadata } from '@/platform/telemetry/types'
+import { useFirebaseAuthStore } from '@/stores/firebaseAuthStore'
 import type { components } from '@/types/comfyRegistryTypes'
 
 type SubscriptionTier = components['schemas']['SubscriptionTier']
 type CheckoutTierKey = Exclude<TierKey, 'founder'>
 type CheckoutTier = CheckoutTierKey | `${CheckoutTierKey}-yearly`
 
-type BillingCycle = 'monthly' | 'yearly'
-
 const getCheckoutTier = (
   tierKey: CheckoutTierKey,
   billingCycle: BillingCycle
 ): CheckoutTier => (billingCycle === 'yearly' ? `${tierKey}-yearly` : tierKey)
+
+const getCheckoutAttributionForCloud =
+  async (): Promise<CheckoutAttributionMetadata> => {
+    // eslint-disable-next-line no-undef
+    if (__DISTRIBUTION__ !== 'cloud') {
+      return {}
+    }
+
+    const { getCheckoutAttribution } =
+      await import('@/platform/telemetry/utils/checkoutAttribution')
+
+    return getCheckoutAttribution()
+  }
 
 interface BillingCycleOption {
   label: string
@@ -293,6 +307,8 @@ interface PricingTierConfig {
   customLoRAs: boolean
   isPopular?: boolean
 }
+
+const { t, n } = useI18n()
 
 const billingCycleOptions: BillingCycleOption[] = [
   { label: t('subscription.yearly'), value: 'yearly' },
@@ -328,10 +344,10 @@ const tiers: PricingTierConfig[] = [
     isPopular: false
   }
 ]
-
-const { n } = useI18n()
-const { getAuthHeader } = useFirebaseAuthStore()
-const { isActiveSubscription, subscriptionTier } = useSubscription()
+const { isActiveSubscription, subscriptionTier, isYearlySubscription } =
+  useSubscription()
+const telemetry = useTelemetry()
+const { userId } = storeToRefs(useFirebaseAuthStore())
 const { accessBillingPortal, reportError } = useFirebaseAuthActions()
 const { wrapWithErrorHandlingAsync } = useErrorHandling()
 
@@ -344,8 +360,25 @@ const currentTierKey = computed<TierKey | null>(() =>
   subscriptionTier.value ? TIER_TO_KEY[subscriptionTier.value] : null
 )
 
-const isCurrentPlan = (tierKey: CheckoutTierKey): boolean =>
-  currentTierKey.value === tierKey
+const currentPlanDescriptor = computed(() => {
+  if (!currentTierKey.value) return null
+
+  return {
+    tierKey: currentTierKey.value,
+    billingCycle: isYearlySubscription.value ? 'yearly' : 'monthly'
+  } as const
+})
+
+const isCurrentPlan = (tierKey: CheckoutTierKey): boolean => {
+  if (!currentTierKey.value) return false
+
+  const selectedIsYearly = currentBillingCycle.value === 'yearly'
+
+  return (
+    currentTierKey.value === tierKey &&
+    isYearlySubscription.value === selectedIsYearly
+  )
+}
 
 const togglePopover = (event: Event) => {
   popover.value.toggle(event)
@@ -353,17 +386,24 @@ const togglePopover = (event: Event) => {
 
 const getButtonLabel = (tier: PricingTierConfig): string => {
   if (isCurrentPlan(tier.key)) return t('subscription.currentPlan')
-  if (!isActiveSubscription.value)
-    return t('subscription.subscribeTo', { plan: tier.name })
-  return t('subscription.changeTo', { plan: tier.name })
+
+  const planName =
+    currentBillingCycle.value === 'yearly'
+      ? t('subscription.tierNameYearly', { name: tier.name })
+      : tier.name
+
+  return isActiveSubscription.value
+    ? t('subscription.changeTo', { plan: planName })
+    : t('subscription.subscribeTo', { plan: planName })
 }
 
-const getButtonSeverity = (tier: PricingTierConfig): 'primary' | 'secondary' =>
-  isCurrentPlan(tier.key)
-    ? 'secondary'
-    : tier.key === 'creator'
-      ? 'primary'
-      : 'secondary'
+const getButtonSeverity = (
+  tier: PricingTierConfig
+): 'primary' | 'secondary' => {
+  if (isCurrentPlan(tier.key)) return 'secondary'
+  if (tier.key === 'creator') return 'primary'
+  return 'secondary'
+}
 
 const getButtonTextClass = (tier: PricingTierConfig): string =>
   tier.key === 'creator'
@@ -379,47 +419,6 @@ const getAnnualTotal = (tier: PricingTierConfig): number =>
 const getCreditsDisplay = (tier: PricingTierConfig): number =>
   tier.pricing.credits * (currentBillingCycle.value === 'yearly' ? 12 : 1)
 
-const initiateCheckout = async (tierKey: CheckoutTierKey) => {
-  const authHeader = await getAuthHeader()
-  if (!authHeader) {
-    throw new FirebaseAuthStoreError(t('toastMessages.userNotAuthenticated'))
-  }
-
-  const checkoutTier = getCheckoutTier(tierKey, currentBillingCycle.value)
-  const response = await fetch(
-    `${getComfyApiBaseUrl()}/customers/cloud-subscription-checkout/${checkoutTier}`,
-    {
-      method: 'POST',
-      headers: { ...authHeader, 'Content-Type': 'application/json' }
-    }
-  )
-
-  if (!response.ok) {
-    let errorMessage = 'Failed to initiate checkout'
-    try {
-      const errorData = await response.json()
-      errorMessage = errorData.message || errorMessage
-    } catch {
-      // If JSON parsing fails, try to get text response or use HTTP status
-      try {
-        const errorText = await response.text()
-        errorMessage =
-          errorText || `HTTP ${response.status} ${response.statusText}`
-      } catch {
-        errorMessage = `HTTP ${response.status} ${response.statusText}`
-      }
-    }
-
-    throw new FirebaseAuthStoreError(
-      t('toastMessages.failedToInitiateSubscription', {
-        error: errorMessage
-      })
-    )
-  }
-
-  return await response.json()
-}
-
 const handleSubscribe = wrapWithErrorHandlingAsync(
   async (tierKey: CheckoutTierKey) => {
     if (!isCloud || isLoading.value || isCurrentPlan(tierKey)) return
@@ -429,12 +428,44 @@ const handleSubscribe = wrapWithErrorHandlingAsync(
 
     try {
       if (isActiveSubscription.value) {
-        await accessBillingPortal()
-      } else {
-        const response = await initiateCheckout(tierKey)
-        if (response.checkout_url) {
-          window.open(response.checkout_url, '_blank')
+        const checkoutAttribution = await getCheckoutAttributionForCloud()
+        if (userId.value) {
+          telemetry?.trackBeginCheckout({
+            user_id: userId.value,
+            tier: tierKey,
+            cycle: currentBillingCycle.value,
+            checkout_type: 'change',
+            ...checkoutAttribution,
+            ...(currentTierKey.value
+              ? { previous_tier: currentTierKey.value }
+              : {})
+          })
         }
+        // Pass the target tier to create a deep link to subscription update confirmation
+        const checkoutTier = getCheckoutTier(tierKey, currentBillingCycle.value)
+        const targetPlan = {
+          tierKey,
+          billingCycle: currentBillingCycle.value
+        }
+        const downgrade =
+          currentPlanDescriptor.value &&
+          isPlanDowngrade({
+            current: currentPlanDescriptor.value,
+            target: targetPlan
+          })
+
+        if (downgrade) {
+          // TODO(COMFY-StripeProration): Remove once backend checkout creation mirrors portal proration ("change at billing end")
+          await accessBillingPortal()
+        } else {
+          await accessBillingPortal(checkoutTier)
+        }
+      } else {
+        await performSubscriptionCheckout(
+          tierKey,
+          currentBillingCycle.value,
+          true
+        )
       }
     } finally {
       isLoading.value = false

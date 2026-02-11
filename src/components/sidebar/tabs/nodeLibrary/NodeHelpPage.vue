@@ -5,11 +5,13 @@
     >
       <Button
         v-tooltip.bottom="$t('g.back')"
-        icon="pi pi-arrow-left"
-        text
-        severity="secondary"
+        variant="muted-textonly"
+        size="icon"
+        :aria-label="$t('g.back')"
         @click="$emit('close')"
-      />
+      >
+        <i class="icon-[lucide--arrow-left] size-4" />
+      </Button>
       <span class="ml-2 font-semibold">{{ node.display_name }}</span>
     </div>
     <div class="grow p-4">
@@ -19,9 +21,8 @@
 </template>
 
 <script setup lang="ts">
-import Button from 'primevue/button'
-
 import NodeHelpContent from '@/components/node/NodeHelpContent.vue'
+import Button from '@/components/ui/button/Button.vue'
 import type { ComfyNodeDefImpl } from '@/stores/nodeDefStore'
 
 const { node } = defineProps<{ node: ComfyNodeDefImpl }>()

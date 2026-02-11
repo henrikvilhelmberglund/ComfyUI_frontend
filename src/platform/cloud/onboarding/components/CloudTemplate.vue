@@ -49,7 +49,7 @@
             <Button
               type="button"
               class="h-10 bg-black font-bold text-white"
-              severity="secondary"
+              variant="secondary"
               @click="handleDownloadClick"
             >
               {{ t('cloudStart_download') }}
@@ -62,14 +62,16 @@
 </template>
 
 <script setup lang="ts">
-import Button from 'primevue/button'
+import { useI18n } from 'vue-i18n'
 
-import { t } from '@/i18n'
+import Button from '@/components/ui/button/Button.vue'
 import videoPoster from '@/platform/cloud/onboarding/assets/videos/thumbnail.png'
 import videoSrc from '@/platform/cloud/onboarding/assets/videos/video.mp4'
 import CloudLogo from '@/platform/cloud/onboarding/components/CloudLogo.vue'
 import CloudTemplateFooter from '@/platform/cloud/onboarding/components/CloudTemplateFooter.vue'
 import BaseViewTemplate from '@/views/templates/BaseViewTemplate.vue'
+
+const { t } = useI18n()
 
 const handleDownloadClick = () => {
   window.open('https://www.comfy.org/download', '_blank')

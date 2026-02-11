@@ -3,21 +3,23 @@
     :content-title="$t('templateWorkflows.title', 'Workflow Templates')"
     class="workflow-template-selector-dialog"
   >
+    <template #leftPanelHeaderTitle>
+      <i class="icon-[comfy--template]" />
+      <h2 class="text-neutral text-base">
+        {{ $t('sideToolbar.templates', 'Templates') }}
+      </h2>
+    </template>
     <template #leftPanel>
-      <LeftSidePanel v-model="selectedNavItem" :nav-items="navItems">
-        <template #header-icon>
-          <i class="icon-[comfy--template]" />
-        </template>
-        <template #header-title>
-          <span class="text-neutral text-base">{{
-            $t('sideToolbar.templates', 'Templates')
-          }}</span>
-        </template>
-      </LeftSidePanel>
+      <LeftSidePanel v-model="selectedNavItem" :nav-items="navItems" />
     </template>
 
     <template #header>
-      <SearchBox v-model="searchQuery" size="lg" class="max-w-[384px]" />
+      <SearchBox
+        v-model="searchQuery"
+        size="lg"
+        class="max-w-[384px]"
+        autofocus
+      />
     </template>
 
     <template #header-right-area>
@@ -175,6 +177,7 @@
           <!-- Actual Template Cards -->
           <CardContainer
             v-for="template in isLoading ? [] : displayTemplates"
+            v-show="isTemplateVisibleOnDistribution(template)"
             :key="template.name"
             ref="cardRefs"
             size="compact"
@@ -253,6 +256,11 @@
                         "
                       />
                     </template>
+                    <LogoOverlay
+                      v-if="template.logos?.length"
+                      :logos="template.logos"
+                      :get-logo-url="workflowTemplatesStore.getLogoUrl"
+                    />
                     <ProgressSpinner
                       v-if="loadingTemplate === template.name"
                       class="absolute inset-0 z-10 m-auto h-12 w-12"
@@ -394,6 +402,7 @@ import AudioThumbnail from '@/components/templates/thumbnails/AudioThumbnail.vue
 import CompareSliderThumbnail from '@/components/templates/thumbnails/CompareSliderThumbnail.vue'
 import DefaultThumbnail from '@/components/templates/thumbnails/DefaultThumbnail.vue'
 import HoverDissolveThumbnail from '@/components/templates/thumbnails/HoverDissolveThumbnail.vue'
+import LogoOverlay from '@/components/templates/thumbnails/LogoOverlay.vue'
 import Button from '@/components/ui/button/Button.vue'
 import BaseModalLayout from '@/components/widget/layout/BaseModalLayout.vue'
 import LeftSidePanel from '@/components/widget/panel/LeftSidePanel.vue'
@@ -403,16 +412,19 @@ import { useTemplateFiltering } from '@/composables/useTemplateFiltering'
 import { isCloud } from '@/platform/distribution/types'
 import { useTelemetry } from '@/platform/telemetry'
 import { useTemplateWorkflows } from '@/platform/workflow/templates/composables/useTemplateWorkflows'
-import { useWorkflowTemplatesStore } from '@/platform/workflow/templates/repositories/workflowTemplatesStore'
 import type { TemplateInfo } from '@/platform/workflow/templates/types/template'
+import { useWorkflowTemplatesStore } from '@/platform/workflow/templates/repositories/workflowTemplatesStore'
+import { TemplateIncludeOnDistributionEnum } from '@/platform/workflow/templates/types/template'
+import { useSystemStatsStore } from '@/stores/systemStatsStore'
 import type { NavGroupData, NavItemData } from '@/types/navTypes'
 import { OnCloseKey } from '@/types/widgetTypes'
 import { createGridStyle } from '@/utils/gridUtil'
 
 const { t } = useI18n()
 
-const { onClose: originalOnClose } = defineProps<{
+const { onClose: originalOnClose, initialCategory = 'all' } = defineProps<{
   onClose: () => void
+  initialCategory?: string
 }>()
 
 // Track session time for telemetry
@@ -421,6 +433,30 @@ const templateWasSelected = ref(false)
 
 onMounted(() => {
   sessionStartTime.value = Date.now()
+})
+
+const systemStatsStore = useSystemStatsStore()
+
+const distributions = computed(() => {
+  // eslint-disable-next-line no-undef
+  switch (__DISTRIBUTION__) {
+    case 'cloud':
+      return [TemplateIncludeOnDistributionEnum.Cloud]
+    case 'localhost':
+      return [TemplateIncludeOnDistributionEnum.Local]
+    case 'desktop':
+    default:
+      if (systemStatsStore.systemStats?.system.os === 'darwin') {
+        return [
+          TemplateIncludeOnDistributionEnum.Desktop,
+          TemplateIncludeOnDistributionEnum.Mac
+        ]
+      }
+      return [
+        TemplateIncludeOnDistributionEnum.Desktop,
+        TemplateIncludeOnDistributionEnum.Windows
+      ]
+  }
 })
 
 // Wrap onClose to track session end
@@ -511,6 +547,9 @@ const allTemplates = computed(() => {
   return workflowTemplatesStore.enhancedTemplates
 })
 
+// Navigation
+const selectedNavItem = ref<string | null>(initialCategory)
+
 // Filter templates based on selected navigation item
 const navigationFilteredTemplates = computed(() => {
   if (!selectedNavItem.value) {
@@ -520,26 +559,61 @@ const navigationFilteredTemplates = computed(() => {
   return workflowTemplatesStore.filterTemplatesByCategory(selectedNavItem.value)
 })
 
-// Template filtering
+// Template filtering with scope awareness
 const {
   searchQuery,
   selectedModels,
   selectedUseCases,
   selectedRunsOn,
   sortBy,
+  activeModels,
+  activeUseCases,
   filteredTemplates,
   availableModels,
   availableUseCases,
   availableRunsOn,
   filteredCount,
   totalCount,
-  resetFilters
-} = useTemplateFiltering(navigationFilteredTemplates)
+  resetFilters,
+  loadFuseOptions
+} = useTemplateFiltering(navigationFilteredTemplates, selectedNavItem)
+
+/**
+ * Coordinates state between the selected navigation item and the sort order to
+ * create deterministic, predictable behavior.
+ * @param source The origin of the change ('nav' or 'sort').
+ */
+const coordinateNavAndSort = (source: 'nav' | 'sort') => {
+  const isPopularNav = selectedNavItem.value === 'popular'
+  const isPopularSort = sortBy.value === 'popular'
+
+  if (source === 'nav') {
+    if (isPopularNav && !isPopularSort) {
+      // When navigating to 'Popular' category, automatically set sort to 'Popular'.
+      sortBy.value = 'popular'
+    } else if (!isPopularNav && isPopularSort) {
+      // When navigating away from 'Popular' category while sort is 'Popular', reset sort to default.
+      sortBy.value = 'default'
+    }
+  } else if (source === 'sort') {
+    // When sort is changed away from 'Popular' while in the 'Popular' category,
+    // reset the category to 'All Templates' to avoid a confusing state.
+    if (isPopularNav && !isPopularSort) {
+      selectedNavItem.value = 'all'
+    }
+  }
+}
+
+// Watch for changes from the two sources ('nav' and 'sort') and trigger the coordinator.
+watch(selectedNavItem, () => coordinateNavAndSort('nav'))
+watch(sortBy, () => coordinateNavAndSort('sort'))
 
 // Convert between string array and object array for MultiSelect component
+// Only show selected items that exist in the current scope
 const selectedModelObjects = computed({
   get() {
-    return selectedModels.value.map((model) => ({ name: model, value: model }))
+    // Only include selected models that exist in availableModels
+    return activeModels.value.map((model) => ({ name: model, value: model }))
   },
   set(value: { name: string; value: string }[]) {
     selectedModels.value = value.map((item) => item.value)
@@ -548,7 +622,7 @@ const selectedModelObjects = computed({
 
 const selectedUseCaseObjects = computed({
   get() {
-    return selectedUseCases.value.map((useCase) => ({
+    return activeUseCases.value.map((useCase) => ({
       name: useCase,
       value: useCase
     }))
@@ -577,9 +651,6 @@ const cardRefs = ref<HTMLElement[]>([])
 
 // Force re-render key for templates when sorting changes
 const templateListKey = ref(0)
-
-// Navigation
-const selectedNavItem = ref<string | null>('all')
 
 // Search text for model filter
 const modelSearchText = ref<string>('')
@@ -645,11 +716,19 @@ const runsOnFilterLabel = computed(() => {
 
 // Sort options
 const sortOptions = computed(() => [
-  { name: t('templateWorkflows.sort.newest', 'Newest'), value: 'newest' },
   {
     name: t('templateWorkflows.sort.default', 'Default'),
     value: 'default'
   },
+  {
+    name: t('templateWorkflows.sort.recommended', 'Recommended'),
+    value: 'recommended'
+  },
+  {
+    name: t('templateWorkflows.sort.popular', 'Popular'),
+    value: 'popular'
+  },
+  { name: t('templateWorkflows.sort.newest', 'Newest'), value: 'newest' },
   {
     name: t('templateWorkflows.sort.vramLowToHigh', 'VRAM Usage (Low to High)'),
     value: 'vram-low-to-high'
@@ -700,7 +779,7 @@ useIntersectionObserver(loadTrigger, () => {
 // Reset pagination when filters change
 watch(
   [
-    searchQuery,
+    filteredTemplates,
     selectedNavItem,
     sortBy,
     selectedModels,
@@ -716,7 +795,7 @@ watch(
 )
 
 // Methods
-const onLoadWorkflow = async (template: any) => {
+const onLoadWorkflow = async (template: TemplateInfo) => {
   loadingTemplate.value = template.name
   try {
     await loadWorkflowTemplate(
@@ -750,10 +829,10 @@ const pageTitle = computed(() => {
 // Initialize templates loading with useAsyncState
 const { isLoading } = useAsyncState(
   async () => {
-    // Run both operations in parallel for better performance
     await Promise.all([
       loadTemplates(),
-      workflowTemplatesStore.loadWorkflowTemplates()
+      workflowTemplatesStore.loadWorkflowTemplates(),
+      loadFuseOptions()
     ])
     return true
   },
@@ -762,6 +841,14 @@ const { isLoading } = useAsyncState(
     immediate: true // Start loading immediately
   }
 )
+
+const isTemplateVisibleOnDistribution = (template: TemplateInfo) => {
+  return (template.includeOnDistributions?.length ?? 0) > 0
+    ? distributions.value.some((d) =>
+        template.includeOnDistributions?.includes(d)
+      )
+    : true
+}
 
 onBeforeUnmount(() => {
   cardRefs.value = [] // Release DOM refs

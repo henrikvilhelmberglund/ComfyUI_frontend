@@ -275,7 +275,9 @@ const zExtra = z
     frontendVersion: z.string().optional(),
     linkExtensions: z.array(zComfyLinkExtension).optional(),
     reroutes: z.array(zReroute).optional(),
-    workflowRendererVersion: zRendererType.optional()
+    workflowRendererVersion: zRendererType.optional(),
+    BlueprintDescription: z.string().optional(),
+    BlueprintSearchAliases: z.array(z.string()).optional()
   })
   .passthrough()
 
@@ -394,6 +396,11 @@ interface SubgraphDefinitionBase<
   id: string
   revision: number
   name: string
+  category?: string
+  /** Custom metadata for the subgraph (description, searchAliases, etc.) */
+  extra?: T extends ComfyWorkflow1BaseInput
+    ? z.input<typeof zExtra> | null
+    : z.output<typeof zExtra> | null
 
   inputNode: T extends ComfyWorkflow1BaseInput
     ? z.input<typeof zExportedSubgraphIONode>
@@ -425,6 +432,7 @@ const zSubgraphDefinition = zComfyWorkflow1
     id: z.string().uuid(),
     revision: z.number(),
     name: z.string(),
+    category: z.string().optional(),
     inputNode: zExportedSubgraphIONode,
     outputNode: zExportedSubgraphIONode,
 
@@ -452,7 +460,6 @@ const zSubgraphDefinition = zComfyWorkflow1
   .passthrough()
 
 export type ModelFile = z.infer<typeof zModelFile>
-export type ComfyLink = z.infer<typeof zComfyLink>
 export type ComfyLinkObject = z.infer<typeof zComfyLinkObject>
 export type ComfyNode = z.infer<typeof zComfyNode>
 export type Reroute = z.infer<typeof zReroute>

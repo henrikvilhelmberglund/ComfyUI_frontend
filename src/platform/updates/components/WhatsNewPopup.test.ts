@@ -1,6 +1,6 @@
 import type { VueWrapper } from '@vue/test-utils'
 import { mount } from '@vue/test-utils'
-import Button from 'primevue/button'
+import Button from '@/components/ui/button/Button.vue'
 import PrimeVue from 'primevue/config'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -165,7 +165,9 @@ describe('WhatsNewPopup', () => {
     wrapper = mountComponent()
 
     // Call the close method directly instead of triggering DOM event
-    await (wrapper.vm as any).closePopup()
+    await (
+      wrapper.vm as typeof wrapper.vm & { closePopup: () => Promise<void> }
+    ).closePopup()
 
     expect(wrapper.emitted('whats-new-dismissed')).toBeTruthy()
   })

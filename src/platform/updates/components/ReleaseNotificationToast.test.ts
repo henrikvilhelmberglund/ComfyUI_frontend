@@ -5,6 +5,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReleaseNote } from '../common/releaseService'
 import ReleaseNotificationToast from './ReleaseNotificationToast.vue'
 
+const mockData = vi.hoisted(() => ({ isDesktop: false }))
+
+const { commandExecuteMock } = vi.hoisted(() => ({
+  commandExecuteMock: vi.fn()
+}))
+
+const { toastErrorHandlerMock } = vi.hoisted(() => ({
+  toastErrorHandlerMock: vi.fn()
+}))
+
+vi.mock('@/platform/distribution/types', () => ({
+  isCloud: false,
+  isNightly: false,
+  get isDesktop() {
+    return mockData.isDesktop
+  }
+}))
+
 // Mock dependencies
 vi.mock('vue-i18n', () => ({
   useI18n: vi.fn(() => ({
@@ -34,6 +52,18 @@ vi.mock('@/utils/formatUtil', () => ({
 
 vi.mock('@/utils/markdownRendererUtil', () => ({
   renderMarkdownToHtml: vi.fn((content: string) => `<div>${content}</div>`)
+}))
+
+vi.mock('@/composables/useErrorHandling', () => ({
+  useErrorHandling: vi.fn(() => ({
+    toastErrorHandler: toastErrorHandlerMock
+  }))
+}))
+
+vi.mock('@/stores/commandStore', () => ({
+  useCommandStore: vi.fn(() => ({
+    execute: commandExecuteMock
+  }))
 }))
 
 // Mock release store
@@ -81,6 +111,7 @@ describe('ReleaseNotificationToast', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockData.isDesktop = false
     // Reset store state
     mockReleaseStore.recentRelease = null
     mockReleaseStore.shouldShowToast = true // Force show for testing
@@ -157,6 +188,54 @@ describe('ReleaseNotificationToast', () => {
       'https://docs.comfy.org/installation/update_comfyui',
       '_blank'
     )
+  })
+
+  it('executes desktop updater flow when running on desktop', async () => {
+    mockData.isDesktop = true
+    mockReleaseStore.recentRelease = {
+      version: '1.2.3',
+      content: '# Test Release'
+    } as ReleaseNote
+
+    commandExecuteMock.mockResolvedValueOnce(undefined)
+
+    const mockWindowOpen = vi.fn()
+    Object.defineProperty(window, 'open', {
+      value: mockWindowOpen,
+      writable: true
+    })
+
+    wrapper = mountComponent()
+    await wrapper.vm.handleUpdate()
+
+    expect(commandExecuteMock).toHaveBeenCalledWith(
+      'Comfy-Desktop.CheckForUpdates'
+    )
+    expect(mockWindowOpen).not.toHaveBeenCalled()
+    expect(toastErrorHandlerMock).not.toHaveBeenCalled()
+  })
+
+  it('shows an error toast if the desktop updater flow fails on desktop', async () => {
+    mockData.isDesktop = true
+    mockReleaseStore.recentRelease = {
+      version: '1.2.3',
+      content: '# Test Release'
+    } as ReleaseNote
+
+    const error = new Error('Command Comfy-Desktop.CheckForUpdates not found')
+    commandExecuteMock.mockRejectedValueOnce(error)
+
+    const mockWindowOpen = vi.fn()
+    Object.defineProperty(window, 'open', {
+      value: mockWindowOpen,
+      writable: true
+    })
+
+    wrapper = mountComponent()
+    await wrapper.vm.handleUpdate()
+
+    expect(toastErrorHandlerMock).toHaveBeenCalledWith(error)
+    expect(mockWindowOpen).not.toHaveBeenCalled()
   })
 
   it('calls handleShowChangelog when learn more link is clicked', async () => {
